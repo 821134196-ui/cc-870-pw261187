@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pointwise 本地 API 网关 · 调试台</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #181b24; --panel2: #1f2330; --line: #2a2f3e;
+    --txt: #e6e9ef; --dim: #8b93a7; --accent: #5b8def; --green: #3ecf8e;
+    --red: #ef6a6a; --amber: #f0b454; --violet: #a78bfa; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.6 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft Yahei",sans-serif; }
+  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  .badge { font-family:var(--mono); font-size:12px; padding:2px 8px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); color:var(--dim); }
+  .badge.live { color:var(--green); border-color:var(--green); }
+  .grid { display:grid; grid-template-columns: 380px 1fr; gap:16px; padding:16px 24px; }
+  @media (max-width: 1000px){ .grid{grid-template-columns:1fr;} }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:16px; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
+  .chain-card { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px; background:var(--panel2); }
+  .chain-card.active { border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset; }
+  .chain-card.draft { opacity:.75; }
+  .chain-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .chain-name { font-family:var(--mono); font-weight:600; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:9px; font-family:var(--mono); }
+  .tag.v1 { background:#24304a; color:#9cc0ff; } .tag.v2 { background:#3a2a4d; color:#d3b4ff; }
+  .tag.confirmed { background:#143524; color:var(--green); } .tag.draft { background:#3d2f16; color:var(--amber); }
+  .tag.active { background:#143524; color:var(--green); } .tag.incompat { background:#401d1d; color:var(--red); }
+  .chain-desc { color:var(--dim); font-size:12px; margin:6px 0; }
+  .plugin-line { font-family:var(--mono); font-size:12px; color:var(--dim); padding-left:8px; border-left:2px solid var(--line); margin:4px 0 4px 4px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  button { background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:7px; padding:6px 12px; font-size:12px; cursor:pointer; font-family:var(--mono); }
+  button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { border-color:var(--red); color:var(--red); }
+  button.good { border-color:var(--green); color:var(--green); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  input, select, textarea { width:100%; background:var(--bg); border:1px solid var(--line); border-radius:7px; color:var(--txt); padding:7px 10px; font-family:var(--mono); font-size:12px; }
+  textarea { min-height:120px; resize:vertical; }
+  label { font-size:11px; color:var(--dim); display:block; margin:8px 0 3px; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:6px 10px; font-size:12px; margin:6px 0; }
+  .kv .k { color:var(--dim); font-family:var(--mono); }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:12px; overflow:auto; max-height:340px; margin:6px 0; white-space:pre-wrap; word-break:break-all; }
+  .trace { font-family:var(--mono); font-size:12px; padding:8px 10px; border-radius:7px; background:var(--bg); border:1px solid var(--line); margin:6px 0; }
+  .trace .B { color:var(--amber); } .trace .T { color:var(--green); }
+  .status-2xx { color:var(--green); } .status-4xx { color:var(--red); } .status-5xx { color:var(--red); }
+  .toast { position:fixed; right:24px; bottom:24px; max-width:420px; z-index:50; }
+  .toast .item { border-radius:8px; padding:10px 14px; margin-top:8px; font-size:12px; border:1px solid var(--line); background:var(--panel2); box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  .toast .item.err { border-color:var(--red); } .toast .item.ok { border-color:var(--green); }
+  .compare-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .compare-table th, .compare-table td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  .compare-table th { background:var(--panel2); color:var(--dim); font-weight:600; }
+  .sse-event { border-left:3px solid var(--violet); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:0 7px 7px 0; font-family:var(--mono); font-size:12px; }
+  .small { font-size:11px; color:var(--dim); }
+  .gate-note { background:#2a1a1a; border:1px solid #552828; border-radius:8px; padding:10px 12px; font-size:12px; margin-top:8px; }
+  .gate-note.ok { background:#16281d; border-color:#235038; }
+  .slotbar { display:flex; gap:6px; margin:8px 0; }
+  .slot { flex:1; text-align:center; padding:6px 4px; border-radius:6px; font-family:var(--mono); font-size:11px; border:1px solid var(--line); background:var(--bg); }
+  .slot.base { color:var(--amber); border-color:var(--amber); } .slot.target { color:var(--green); border-color:var(--green); }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .hidden { display:none; }
+  code.inline { font-family:var(--mono); background:var(--bg); padding:1px 5px; border-radius:4px; font-size:11px; color:var(--violet); }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ Pointwise 本地 API 网关</h1>
+  <span class="badge" id="activeBadge">active: …</span>
+  <span class="badge" id="modeBadge">mode: atomic</span>
+  <span class="badge live" id="sconn">events: connecting…</span>
+  <span style="flex:1"></span>
+  <button onclick="loadState()">刷新状态</button>
+</header>
+
+<div class="grid">
+  <!-- ============ 左列：链库 ============ -->
+  <div>
+    <div class="panel">
+      <h2>链库（draft → confirmed → active）</h2>
+      <div id="chainList"></div>
+    </div>
+    <div class="panel">
+      <h2>插件注册表 / 上下文契约</h2>
+      <div id="pluginList" class="small"></div>
+    </div>
+  </div>
+
+  <!-- ============ 右列：调试 ============ -->
+  <div>
+    <div class="panel">
+      <h2>① 试发请求（数据面）</h2>
+      <div class="row">
+        <select id="m" style="width:110px"><option>POST</option><option>GET</option><option>PUT</option></select>
+        <select id="path" style="flex:1">
+          <option>/echo</option><option>/users</option><option>/users/42</option><option>/stream/users</option>
+        </select>
+      </div>
+      <label>请求头（每行 Key: Value，v2 scope 头：x-scopes: write:users）</label>
+      <textarea id="hdrs" style="min-height:60px">content-type: application/json
+x-user: tester-1</textarea>
+      <label>JSON Body</label>
+      <textarea id="body">{
+  "user": { "name": "alice", "age": 25, "role": "member", "ssn": "111-22-3333" },
+  "internal": { "debug": true, "token": "secret" }
+}</textarea>
+      <div class="row">
+        <button class="primary" onclick="sendRequest()">发送 →</button>
+        <button onclick="openSse()">▶ 订阅 SSE 流</button>
+        <button onclick="closeSse()">■ 关闭流</button>
+        <span class="small" style="align-self:center">流打开期间去切换链，可验证流内仍钉在旧链</span>
+      </div>
+      <div id="respMeta"></div>
+      <pre id="respOut" class="hidden"></pre>
+      <div id="sseBox"></div>
+    </div>
+
+    <div class="panel">
+      <h2>② 整条链热切换 vs 逐插件替换</h2>
+      <div class="tabs">
+        <button class="on" id="tabHot" onclick="switchTab('hot')">热切换（原子）</button>
+        <button id="tabRoll" onclick="switchTab('roll')">逐插件替换（滚动）</button>
+      </div>
+
+      <div id="paneHot">
+        <p class="small">
+          原子翻转：一次指针赋值，每个请求要么整条旧链要么整条新链，<b>绝不混合</b>；
+          允许跨上下文版本（v1→v2）。进行中的 SSE 流持有旧快照，继续跑旧链。
+        </p>
+        <div class="row">
+          <button class="good" onclick="hotDeploy('chain-b')">热切换到 chain-b (v2)</button>
+          <button class="good" onclick="hotDeploy('chain-a')">热切换回 chain-a (v1)</button>
+          <button onclick="rollback()">↩ 回退到上一条</button>
+          <button onclick="raceDemo('hot')">🏁 并发对比演示（切换中连发 12 个请求）</button>
+        </div>
+      </div>
+
+      <div id="paneRoll" class="hidden">
+        <p class="small">
+          逐槽位替换：滚动窗口内请求拿到<b>混合视图</b>（trace 中 <span class="B">B:</span>=base /
+          <span class="T">T:</span>=target）。仅允许<b>同上下文版本、同插件序列</b>（chain-a → chain-a2）；
+          跨版本或结构变化会在接流量前被拒，提示走原子热切换。
+        </p>
+        <div class="row">
+          <button onclick="rollStart('chain-a2')">开始滚动 → chain-a2</button>
+          <button onclick="rollStart('chain-b')" class="danger">尝试滚动 → chain-b（v2，应被拦）</button>
+          <button onclick="rollAdvance()">推进下一槽位</button>
+          <button class="danger" onclick="rollRollback()">回退滚动（槽位全退回 base）</button>
+          <button onclick="raceDemo('rolling')">🏁 混合期并发演示</button>
+        </div>
+        <div id="rollStatus"></div>
+      </div>
+      <div id="raceOut"></div>
+    </div>
+
+    <div class="panel">
+      <h2>③ 兼容闸门：插件不支持新版上下文</h2>
+      <p class="small">
+        <code class="inline">legacy-audit</code> 只声明支持 context v1。chain-c 是 v2 链且包含它 ——
+        点击确认，闸门必须在接流量之前拒绝；活动链不受影响，随后可回退/改配置重新确认。
+      </p>
+      <div class="row">
+        <button class="danger" onclick="confirmChain('chain-c')">尝试确认 chain-c（v2 + v1-only 插件）</button>
+        <button onclick="confirmChain('chain-b')">确认 chain-b（兼容，对照）</button>
+      </div>
+      <div id="gateOut"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
